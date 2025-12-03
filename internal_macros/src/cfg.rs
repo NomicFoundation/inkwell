@@ -112,11 +112,7 @@ struct Version {
 }
 
 fn default_minor(major: u32) -> u32 {
-    if major >= 18 {
-        1
-    } else {
-        0
-    }
+    if major >= 18 { 1 } else { 0 }
 }
 
 impl Parse for Version {

@@ -1,7 +1,9 @@
 //! This module contains some supplemental functions for dealing with errors.
 
 use libc::c_void;
-use llvm_sys::core::{LLVMGetDiagInfoDescription, LLVMGetDiagInfoSeverity};
+use llvm_sys::core::{
+    LLVMGetDiagInfoDescription, LLVMGetDiagInfoSeverity, LLVMInstallEVMStackErrorHandler, LLVMStackErrorHandlerEVM,
+};
 use llvm_sys::error_handling::{LLVMInstallFatalErrorHandler, LLVMResetFatalErrorHandler};
 use llvm_sys::prelude::LLVMDiagnosticInfoRef;
 use llvm_sys::LLVMDiagnosticSeverity;
@@ -26,6 +28,12 @@ pub unsafe fn install_fatal_error_handler(handler: extern "C" fn(*const ::libc::
 /// Resets LLVM's fatal error handler back to the default
 pub fn reset_fatal_error_handler() {
     unsafe { LLVMResetFatalErrorHandler() }
+}
+
+/// Sets the callback for handling EVM stack-too-deep errors.
+#[cfg(all(feature = "llvm21-1", feature = "target-evm"))]
+pub fn install_stack_error_handler(handler: LLVMStackErrorHandlerEVM) {
+    unsafe { LLVMInstallEVMStackErrorHandler(handler) }
 }
 
 pub(crate) struct DiagnosticInfo {
