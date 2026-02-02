@@ -12,7 +12,7 @@ use llvm_sys::target_machine::{
     LLVMGetTargetFromTriple, LLVMGetTargetMachineCPU, LLVMGetTargetMachineFeatureString, LLVMGetTargetMachineTarget,
     LLVMGetTargetMachineTriple, LLVMGetTargetName, LLVMRelocMode, LLVMSetTargetMachineAsmVerbosity,
     LLVMTargetHasAsmBackend, LLVMTargetHasJIT, LLVMTargetHasTargetMachine, LLVMTargetMachineEmitToFile,
-    LLVMTargetMachineEmitToMemoryBuffer, LLVMTargetMachineRef, LLVMTargetRef,
+    LLVMTargetMachineEmitToMemoryBuffer, LLVMTargetMachineEmitToMemoryBufferWithDbg, LLVMTargetMachineRef, LLVMTargetRef,
 };
 #[llvm_versions(18..)]
 use llvm_sys::target_machine::{
@@ -1234,6 +1234,67 @@ impl TargetMachine {
         }
 
         unsafe { Ok(MemoryBuffer::new(memory_buffer)) }
+    }
+
+    /// Writes a `TargetMachine` and debug info to `MemoryBuffer`s.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use inkwell::OptimizationLevel;
+    /// use inkwell::context::Context;
+    /// use inkwell::targets::{CodeModel, RelocMode, FileType, Target, TargetMachine, TargetTriple, InitializationConfig};
+    ///
+    /// Target::initialize_x86(&InitializationConfig::default());
+    ///
+    /// let opt = OptimizationLevel::Default;
+    /// let reloc = RelocMode::Default;
+    /// let model = CodeModel::Default;
+    /// let target = Target::from_name("x86-64").unwrap();
+    /// let target_machine = target.create_target_machine(
+    ///     &TargetTriple::create("x86_64-pc-linux-gnu"),
+    ///     "x86-64",
+    ///     "+avx2",
+    ///     opt,
+    ///     reloc,
+    ///     model
+    /// )
+    /// .unwrap();
+    ///
+    /// let context = Context::create();
+    /// let module = context.create_module("my_module");
+    /// let void_type = context.void_type();
+    /// let fn_type = void_type.fn_type(&[], false);
+    ///
+    /// module.add_function("my_fn", fn_type, None);
+    ///
+    /// let (buffer, debug_buffer) = target_machine.write_to_memory_buffer_with_dbg(&module, FileType::Assembly).unwrap();
+    /// ```
+    pub fn write_to_memory_buffer_with_dbg(&self, module: &Module, file_type: FileType) -> Result<(MemoryBuffer, MemoryBuffer), LLVMString> {
+        let mut memory_buffer = ptr::null_mut();
+        let mut debug_buffer = ptr::null_mut();
+        let mut err_string = MaybeUninit::uninit();
+        let return_code = unsafe {
+            let module_ptr = module.module.get();
+            let file_type_ptr = file_type.as_llvm_file_type();
+
+            LLVMTargetMachineEmitToMemoryBufferWithDbg(
+                self.target_machine,
+                module_ptr,
+                file_type_ptr,
+                err_string.as_mut_ptr(),
+                &mut memory_buffer,
+                &mut debug_buffer,
+            )
+        };
+
+        if return_code == 1 {
+            unsafe {
+                return Err(LLVMString::new(err_string.assume_init()));
+            }
+        }
+
+        unsafe { Ok((MemoryBuffer::new(memory_buffer), MemoryBuffer::new(debug_buffer))) }
     }
 
     /// Saves a `TargetMachine` to a file.
