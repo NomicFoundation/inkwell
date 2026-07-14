@@ -7,7 +7,8 @@ use llvm_sys::core::LLVMGetVersion;
 use llvm_sys::core::{LLVMCreateMessage, LLVMDisposeMessage};
 use llvm_sys::error_handling::LLVMEnablePrettyStackTrace;
 use llvm_sys::support::{
-    LLVMLoadLibraryPermanently, LLVMParseCommandLineOptions, LLVMPrintCommitIDTo, LLVMSearchForAddressOfSymbol,
+    LLVMLoadLibraryPermanently, LLVMParseCommandLineOptions, LLVMPrintCommitIDTo, LLVMResetAllOptionOccurrences,
+    LLVMSearchForAddressOfSymbol,
 };
 
 use std::borrow::Cow;
@@ -152,6 +153,14 @@ pub fn parse_command_line_options(args: &[&str], overview: &str) {
 
     unsafe {
         LLVMParseCommandLineOptions(argc, args.as_ptr(), overview.as_ptr());
+    }
+}
+
+/// Reset every registered LLVM command line option to its default, so a subsequent
+/// [`parse_command_line_options`] starts from a clean state.
+pub fn reset_all_option_occurrences() {
+    unsafe {
+        LLVMResetAllOptionOccurrences();
     }
 }
 
