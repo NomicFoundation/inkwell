@@ -9,7 +9,7 @@ use llvm_sys::prelude::LLVMDiagnosticInfoRef;
 use llvm_sys::LLVMDiagnosticSeverity;
 
 // TODOC: Can be used like this:
-// extern "C" fn print_before_exit(msg: *const i8) {
+// extern "C" fn print_before_exit(msg: *const ::libc::c_char) {
 //    let c_str = unsafe { std::ffi::CStr::from_ptr(msg) };
 //
 //    eprintln!("LLVM fatally errored: {:?}", c_str);
