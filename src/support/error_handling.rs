@@ -8,21 +8,17 @@ use llvm_sys::error_handling::{LLVMInstallFatalErrorHandler, LLVMResetFatalError
 use llvm_sys::prelude::LLVMDiagnosticInfoRef;
 use llvm_sys::LLVMDiagnosticSeverity;
 
-// REVIEW: Maybe it's possible to have a safe wrapper? If we can
-// wrap the provided function input ptr into a &CStr somehow
 // TODOC: Can be used like this:
-// extern "C" fn print_before_exit(msg: *const i8) {
+// extern "C" fn print_before_exit(msg: *const ::libc::c_char) {
 //    let c_str = unsafe { std::ffi::CStr::from_ptr(msg) };
 //
 //    eprintln!("LLVM fatally errored: {:?}", c_str);
 // }
-// unsafe {
-//     install_fatal_error_handler(print_before_exit);
-// }
+// install_fatal_error_handler(print_before_exit);
 // and will be called before LLVM calls C exit()
 /// Installs an error handler to be called before LLVM exits.
-pub unsafe fn install_fatal_error_handler(handler: extern "C" fn(*const ::libc::c_char)) {
-    LLVMInstallFatalErrorHandler(Some(handler))
+pub fn install_fatal_error_handler(handler: extern "C" fn(*const ::libc::c_char)) {
+    unsafe { LLVMInstallFatalErrorHandler(Some(handler)) }
 }
 
 /// Resets LLVM's fatal error handler back to the default
