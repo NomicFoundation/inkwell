@@ -478,6 +478,35 @@ fn test_metadata_flags() {
 
     assert!(module.get_flag("some_key3").is_some());
     assert!(module.verify().is_ok());
+
+    let i64_type = context.i64_type();
+
+    assert!(module.get_flag("some_key4").is_none());
+
+    module.set_basic_value_flag("some_key4", FlagBehavior::Error, i64_type.const_int(1, false));
+
+    assert!(module.get_flag("some_key4").is_some());
+
+    let flag_count = module.get_global_metadata_size("llvm.module.flags");
+
+    module.set_basic_value_flag("some_key4", FlagBehavior::Error, i64_type.const_int(2, false));
+
+    assert_eq!(module.get_global_metadata_size("llvm.module.flags"), flag_count);
+
+    let some_key4 = module
+        .get_global_metadata("llvm.module.flags")
+        .into_iter()
+        .map(|flag| flag.get_node_values())
+        .find(|operands| {
+            operands[1]
+                .into_metadata_value()
+                .get_string_value()
+                .map_or(false, |s| s.to_bytes() == b"some_key4")
+        })
+        .unwrap();
+
+    assert_eq!(some_key4[2].into_int_value().get_zero_extended_constant(), Some(2));
+    assert!(module.verify().is_ok());
 }
 
 #[test]

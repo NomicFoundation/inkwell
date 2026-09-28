@@ -1511,6 +1511,42 @@ impl<'ctx> Module<'ctx> {
         }
     }
 
+    /// Replace the value of the `key` module wide flag, appending the flag with
+    /// `behavior` if the module does not carry it yet. An existing flag keeps its
+    /// behavior.
+    pub fn set_basic_value_flag<BV: BasicValue<'ctx>>(&self, key: &str, behavior: FlagBehavior, flag: BV) {
+        use llvm_sys::core::{LLVMReplaceMDNodeOperandWith, LLVMValueAsMetadata};
+
+        const KEY_OPERAND: usize = 1;
+        const VALUE_OPERAND: u32 = 2;
+
+        for entry in self.get_global_metadata("llvm.module.flags") {
+            let operands = entry.get_node_values();
+            let name = match operands.get(KEY_OPERAND) {
+                Some(name) => name,
+                None => continue,
+            };
+            let is_key = name
+                .into_metadata_value()
+                .get_string_value()
+                .map_or(false, |s| s.to_bytes() == key.as_bytes());
+            if !is_key {
+                continue;
+            }
+
+            unsafe {
+                LLVMReplaceMDNodeOperandWith(
+                    entry.as_value_ref(),
+                    VALUE_OPERAND,
+                    LLVMValueAsMetadata(flag.as_value_ref()),
+                )
+            };
+            return;
+        }
+
+        self.add_basic_value_flag(key, behavior, flag);
+    }
+
     /// Strips and debug info from the module, if it exists.
     pub fn strip_debug_info(&self) -> bool {
         unsafe { LLVMStripModuleDebugInfo(self.module.get()) == 1 }
