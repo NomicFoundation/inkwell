@@ -4,7 +4,7 @@ use llvm_sys::core::{
     LLVMGetBufferSize, LLVMGetBufferStart,
 };
 use llvm_sys::linker::{
-    LLVMAddMetadata, LLVMAssembleEVM, LLVMDisposeImmutablesEVM, LLVMDisposeSymbolOffsetsEVM,
+    LLVMAssembleEVM, LLVMDisposeImmutablesEVM, LLVMDisposeSymbolOffsetsEVM,
     LLVMDisposeUndefinedReferences, LLVMGetImmutablesEVM, LLVMGetSymbolOffsetsEVM, LLVMGetUndefinedReferencesEVM,
     LLVMIsELFEVM, LLVMLinkEVM,
 };
@@ -263,36 +263,14 @@ impl MemoryBuffer {
         symbol_offset_offsets
     }
 
-    /// Appends metadata to the EVM module.
+    /// Assembles EVM dependencies, appending `metadata` to the code of the first buffer.
     #[cfg(all(feature = "llvm21-1", feature = "target-evm"))]
-    pub fn append_metadata_evm(&self, metadata: &[u8]) -> Result<Self, LLVMString> {
-        let mut output_buffer = ptr::null_mut();
-        let mut err_string = MaybeUninit::uninit();
-
-        let metadata_ptr = metadata.as_ptr() as *const ::libc::c_char;
-
-        let return_code = unsafe {
-            LLVMAddMetadata(
-                self.memory_buffer,
-                metadata_ptr,
-                metadata.len() as u64,
-                &mut output_buffer,
-                err_string.as_mut_ptr(),
-            )
-        };
-
-        if return_code == 1 {
-            unsafe {
-                return Err(LLVMString::new(err_string.assume_init()));
-            }
-        }
-
-        Ok(unsafe { Self::new(output_buffer) })
-    }
-
-    /// Assembles EVM dependencies.
-    #[cfg(all(feature = "llvm21-1", feature = "target-evm"))]
-    pub fn assemble_evm(buffers: &[&Self], buffer_ids: &[&str], code_segment: CodeSegment) -> Result<Self, LLVMString> {
+    pub fn assemble_evm(
+        buffers: &[&Self],
+        buffer_ids: &[&str],
+        code_segment: CodeSegment,
+        metadata: &[u8],
+    ) -> Result<Self, LLVMString> {
         let mut output_buffer = ptr::null_mut();
         let mut err_string = MaybeUninit::uninit();
 
@@ -316,6 +294,8 @@ impl MemoryBuffer {
                 buffer_ptrs.as_ptr() as *const LLVMMemoryBufferRef,
                 buffer_ids.as_ptr(),
                 buffer_ptrs.len() as u64,
+                metadata.as_ptr() as *const ::libc::c_char,
+                metadata.len() as u64,
                 &mut output_buffer,
                 err_string.as_mut_ptr(),
             )
