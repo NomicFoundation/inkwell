@@ -4,8 +4,8 @@ use llvm_sys::core::{
     LLVMGetBufferSize, LLVMGetBufferStart,
 };
 use llvm_sys::linker::{
-    LLVMAddMetadata, LLVMAssembleEVM, LLVMDisposeImmutablesEVM, LLVMDisposeSymbolOffsetsEVM,
-    LLVMDisposeUndefinedReferences, LLVMGetImmutablesEVM, LLVMGetSymbolOffsetsEVM, LLVMGetUndefinedReferencesEVM,
+    LLVMAssembleEVM, LLVMDisposeImmutablesEVM, LLVMDisposeSymbolOffsetsEVM,
+    LLVMDisposeUndefinedReferencesEVM, LLVMGetImmutablesEVM, LLVMGetSymbolOffsetsEVM, LLVMGetUndefinedReferencesEVM,
     LLVMIsELFEVM, LLVMLinkEVM,
 };
 #[allow(deprecated)]
@@ -25,12 +25,6 @@ use std::slice;
 #[derive(Debug)]
 pub struct MemoryBuffer {
     pub(crate) memory_buffer: LLVMMemoryBufferRef,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum CodeSegment {
-    Deploy,
-    Runtime,
 }
 
 impl MemoryBuffer {
@@ -228,7 +222,7 @@ impl MemoryBuffer {
             vec![]
         };
         unsafe {
-            LLVMDisposeUndefinedReferences(
+            LLVMDisposeUndefinedReferencesEVM(
                 linker_symbols_buffer as *const *const ::libc::c_char,
                 linker_symbols_size,
             );
@@ -263,39 +257,9 @@ impl MemoryBuffer {
         symbol_offset_offsets
     }
 
-    /// Appends metadata to the EVM module.
+    /// Assembles EVM dependencies, appending `metadata` to the code of the first buffer.
     #[cfg(all(feature = "llvm21-1", feature = "target-evm"))]
-    pub fn append_metadata_evm(&self, metadata: &[u8]) -> Result<Self, LLVMString> {
-        let mut output_buffer = ptr::null_mut();
-        let mut err_string = MaybeUninit::uninit();
-
-        let metadata_ptr = metadata.as_ptr() as *const ::libc::c_char;
-
-        let return_code = unsafe {
-            LLVMAddMetadata(
-                self.memory_buffer,
-                metadata_ptr,
-                metadata.len() as u64,
-                &mut output_buffer,
-                err_string.as_mut_ptr(),
-            )
-        };
-
-        if return_code == 1 {
-            unsafe {
-                return Err(LLVMString::new(err_string.assume_init()));
-            }
-        }
-
-        Ok(unsafe { Self::new(output_buffer) })
-    }
-
-    /// Assembles EVM dependencies.
-    #[cfg(all(feature = "llvm21-1", feature = "target-evm"))]
-    pub fn assemble_evm(buffers: &[&Self], buffer_ids: &[&str], code_segment: CodeSegment) -> Result<Self, LLVMString> {
-        let mut output_buffer = ptr::null_mut();
-        let mut err_string = MaybeUninit::uninit();
-
+    pub fn assemble_evm(buffers: &[&Self], buffer_ids: &[&str], metadata: &[u8]) -> Self {
         let buffer_ptrs: Vec<LLVMMemoryBufferRef> = buffers.iter().map(|buffer| buffer.memory_buffer).collect();
 
         let buffer_ids: Vec<String> = buffer_ids
@@ -305,29 +269,18 @@ impl MemoryBuffer {
         let buffer_ids: Vec<*const ::libc::c_char> =
             buffer_ids.iter().map(|id| to_c_str(id.as_str()).as_ptr()).collect();
 
-        let code_segment = match code_segment {
-            CodeSegment::Deploy => 0,
-            CodeSegment::Runtime => 1,
-        };
 
-        let return_code = unsafe {
+        let output_buffer = unsafe {
             LLVMAssembleEVM(
-                code_segment,
                 buffer_ptrs.as_ptr() as *const LLVMMemoryBufferRef,
                 buffer_ids.as_ptr(),
                 buffer_ptrs.len() as u64,
-                &mut output_buffer,
-                err_string.as_mut_ptr(),
+                metadata.as_ptr() as *const ::libc::c_char,
+                metadata.len() as u64,
             )
         };
 
-        if return_code == 1 {
-            unsafe {
-                return Err(LLVMString::new(err_string.assume_init()));
-            }
-        }
-
-        Ok(unsafe { MemoryBuffer::new(output_buffer) })
+        unsafe { MemoryBuffer::new(output_buffer) }
     }
 
     /// Links the EVM module.
@@ -335,10 +288,7 @@ impl MemoryBuffer {
     pub fn link_evm(
         &self,
         linker_symbols: &BTreeMap<String, [u8; Self::ETHEREUM_ADDRESS_SIZE]>,
-    ) -> Result<Self, LLVMString> {
-        let mut output_buffer = ptr::null_mut();
-        let mut err_string = MaybeUninit::uninit();
-
+    ) -> Self {
         let linker_symbol_keys: Vec<String> = linker_symbols
             .keys()
             .map(|key| crate::support::to_null_terminated_owned(key.as_str()))
@@ -352,24 +302,16 @@ impl MemoryBuffer {
             .cloned()
             .collect::<Vec<[u8; Self::ETHEREUM_ADDRESS_SIZE]>>();
 
-        let return_code = unsafe {
+        let output_buffer = unsafe {
             LLVMLinkEVM(
                 self.memory_buffer,
-                &mut output_buffer,
                 linker_symbol_keys.as_ptr(),
                 linker_symbol_values.as_ptr() as *const ::libc::c_char,
                 linker_symbols.len() as u64,
-                err_string.as_mut_ptr(),
             )
         };
 
-        if return_code == 1 {
-            unsafe {
-                return Err(LLVMString::new(err_string.assume_init()));
-            }
-        }
-
-        Ok(unsafe { MemoryBuffer::new(output_buffer) })
+        unsafe { MemoryBuffer::new(output_buffer) }
     }
 
     /// Checks if the EVM memory buffer is a valid ELF object.
