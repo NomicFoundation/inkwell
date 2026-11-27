@@ -4,7 +4,7 @@ use llvm_sys::core::{
     LLVMGetBufferSize, LLVMGetBufferStart,
 };
 use llvm_sys::linker::{
-    LLVMAssembleEVM, LLVMDisposeAssembleResultEVM, LLVMDisposeImmutablesEVM, LLVMEVMAssembleResult,
+    LLVMAssembleEVM, LLVMDisposeAssembleResultEVM, LLVMDisposeImmutablesEVM,
     LLVMEVMLibrarySymbol, LLVMGetImmutablesEVM,
 };
 #[allow(deprecated)]
@@ -37,6 +37,11 @@ pub struct EVMAssembleResult {
     pub elf_object: Option<MemoryBuffer>,
     /// One (source name, bytecode offset) pair per unresolved library use.
     pub unresolved_references: Vec<(String, u64)>,
+    /// One entry per input buffer: `Some(offset)` of its text in
+    /// `bytecode`, or `None` when the layout left the input out.
+    pub input_layout: Vec<Option<u64>>,
+    /// The offset of the metadata, which ends `bytecode`.
+    pub metadata_offset: u64,
 }
 
 impl MemoryBuffer {
@@ -269,6 +274,14 @@ impl MemoryBuffer {
             })
             .collect();
 
+        let input_layout = (0..result.num_inputs as usize)
+            .map(|index| unsafe {
+                let offset = *result.input_offsets.add(index);
+                (offset != u64::MAX).then_some(offset)
+            })
+            .collect();
+        let metadata_offset = result.metadata_offset;
+
         let bytecode = unsafe { MemoryBuffer::new(result.bytecode) };
         let elf_object = if result.elf_object.is_null() {
             None
@@ -284,6 +297,8 @@ impl MemoryBuffer {
             bytecode,
             elf_object,
             unresolved_references,
+            input_layout,
+            metadata_offset,
         }
     }
 }
